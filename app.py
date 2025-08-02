@@ -1,130 +1,66 @@
+# app.py
+
 import streamlit as st
 import pandas as pd
-from datetime import datetime
 import os
+from datetime import datetime
+from io import BytesIO
 
-# Caminho para o CSV
+# Caminho do arquivo CSV
 caminho_csv = 'dados/registros.csv'
-os.makedirs(os.path.dirname(caminho_csv), exist_ok=True)
+os.makedirs('dados', exist_ok=True)
 
-# Cria CSV se não existir
+# Se o CSV ainda não existe, cria com cabeçalho
 if not os.path.exists(caminho_csv):
-    df_vazio = pd.DataFrame(columns=[
-        'Data', 'Frota', 'Horímetro Inicial', 'Horímetro Final', 'Horas Trabalhadas', 'Registrado por'
-    ])
-    df_vazio.to_csv(caminho_csv, index=False)
+    pd.DataFrame(columns=["Data", "Operador", "Frota", "Horímetro Inicial", "Horímetro Final", "Horas Trabalhadas"]).to_csv(caminho_csv, index=False)
 
-# Configurações da página
-st.set_page_config(page_title="Horímetro Transjap", page_icon="🛠️", layout="wide")
+# Função para registrar horímetro
+def registrar_horimetro():
+    st.subheader("Registrar Horímetro")
 
-# CSS personalizado para fundo e estilos
-st.markdown("""
-    <style>
-        body {
-            background-color: #f0f2f6;
-        }
-        .main {
-            background-color: #f0f2f6;
-        }
-        header {
-            background-color: #ffffff;
-        }
-        .block-container {
-            padding: 2rem;
-            background-color: #ffffff;
-            border-radius: 12px;
-            box-shadow: 0 4px 8px rgba(0,0,0,0.05);
-        }
-        .stButton>button {
-            background-color: #2b9348;
-            color: white;
-            border-radius: 10px;
-            padding: 0.6em 1.2em;
-            font-weight: bold;
-            transition: background-color 0.3s ease;
-        }
-        .stButton>button:hover {
-            background-color: #267a3e;
-        }
-        .stSelectbox>div>div {
-            border-radius: 6px;
-        }
-        h2 {
-            color: #1e90ff;
-        }
-    </style>
-""", unsafe_allow_html=True)
+    with st.form("formulario_registro"):
+        operador = st.text_input("Nome do operador")
+        frota = st.selectbox("Número da Frota", ["230", "231", "232", "233", "234", "235"])
+        horimetro_inicial = st.number_input("Horímetro Inicial", format="%.2f")
+        horimetro_final = st.number_input("Horímetro Final", format="%.2f")
+        data = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
 
-# Menu lateral
-menu = st.sidebar.radio("📂 Navegação", ["Registrar Horímetro", "Painel do Administrador"])
-
-# Função para carregar dados com tratamento
-def carregar_dados():
-    try:
-        df = pd.read_csv(caminho_csv)
-        if 'Horas Trabalhadas' not in df.columns:
-            df['Horas Trabalhadas'] = df['Horímetro Final'] - df['Horímetro Inicial']
-            df.to_csv(caminho_csv, index=False)
-        df['Data'] = pd.to_datetime(df['Data'])
-        return df.sort_values(by="Data", ascending=False)
-    except pd.errors.EmptyDataError:
-        return pd.DataFrame(columns=[
-            'Data', 'Frota', 'Horímetro Inicial', 'Horímetro Final', 'Horas Trabalhadas', 'Registrado por'
-        ])
-
-# ===== Página de Registro =====
-if menu == "Registrar Horímetro":
-    st.markdown("<h2 style='text-align:center;'>📋 Registro de Horímetro - Transjap</h2>", unsafe_allow_html=True)
-    st.markdown("Registre abaixo os dados do dia da máquina.")
-    st.markdown("---")
-
-    with st.form("formulario_horimetro"):
-        col1, col2 = st.columns(2)
-
-        with col1:
-            operador = st.text_input("👷 Nome do operador")
-            frota = st.text_input("🚜 Frota da máquina")
-
-        with col2:
-            horimetro_inicial = st.number_input("⏱️ Horímetro Inicial", min_value=0.0, step=0.01)
-            horimetro_final = st.number_input("⏱️ Horímetro Final", min_value=0.0, step=0.01)
-
-        enviado = st.form_submit_button("✅ Registrar")
+        enviado = st.form_submit_button("Registrar")
 
         if enviado:
-            if operador and frota and horimetro_final >= horimetro_inicial:
-                horas_trabalhadas = round(horimetro_final - horimetro_inicial, 2)
-                data = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-                novo = pd.DataFrame([[data, frota, horimetro_inicial, horimetro_final, horas_trabalhadas, operador]],
-                                    columns=['Data', 'Frota', 'Horímetro Inicial', 'Horímetro Final', 'Horas Trabalhadas', 'Registrado por'])
+            horas_trabalhadas = round(horimetro_final - horimetro_inicial, 2)
+            novo = pd.DataFrame([[data, operador, frota, horimetro_inicial, horimetro_final, horas_trabalhadas]],
+                                columns=["Data", "Operador", "Frota", "Horímetro Inicial", "Horímetro Final", "Horas Trabalhadas"])
+            df_antigo = pd.read_csv(caminho_csv)
+            df_novo = pd.concat([df_antigo, novo], ignore_index=True)
+            df_novo.to_csv(caminho_csv, index=False)
+            st.success("✅ Registro salvo com sucesso!")
 
-                df_existente = carregar_dados()
-                df_atualizado = pd.concat([df_existente, novo], ignore_index=True)
-                df_atualizado.to_csv(caminho_csv, index=False)
+# Função para a área do administrador
+def visualizar_dados():
+    st.subheader("📊 Registros por Frota")
+    df = pd.read_csv(caminho_csv)
 
-                st.success(f"✅ Registro salvo com sucesso! ({horas_trabalhadas} horas trabalhadas)")
-            else:
-                st.warning("⚠️ Preencha todos os campos corretamente!")
+    frota_escolhida = st.selectbox("Selecione uma frota para filtrar", df["Frota"].unique())
+    df_filtrado = df[df["Frota"] == frota_escolhida]
 
-# ===== Painel do Administrador =====
-elif menu == "Painel do Administrador":
-    st.markdown("<h2 style='text-align:center;'>🧑‍💼 Painel do Administrador</h2>", unsafe_allow_html=True)
-    st.markdown("Visualize todos os registros agrupados por frota.")
-    st.markdown("---")
+    st.dataframe(df_filtrado)
+    st.markdown(f"**Total de horas trabalhadas:** {df_filtrado['Horas Trabalhadas'].sum():.2f} h")
 
-    df = carregar_dados()
+    if st.button("📁 Exportar Excel"):
+        output = BytesIO()
+        with pd.ExcelWriter(output, engine='xlsxwriter') as writer:
+            df_filtrado.to_excel(writer, index=False, sheet_name='Horimetros')
+        st.download_button(label="⬇️ Baixar Excel", data=output.getvalue(), file_name="horimetros.xlsx", mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
 
-    if df.empty:
-        st.warning("Nenhum registro encontrado.")
-    else:
-        st.markdown(f"🔢 **Total de registros:** `{len(df)}`")
-        st.markdown(f"⏱️ **Total de horas registradas:** `{round(df['Horas Trabalhadas'].sum(), 2)} h`")
-        st.markdown("### 📌 Registros agrupados por frota:")
+# Estilo
+st.set_page_config(page_title="Controle de Horímetro", layout="centered")
+st.title("Controle de Horímetro - Transjap")
 
-        frotas = sorted(df['Frota'].unique())
-        for frota in frotas:
-            with st.expander(f"🚜 Frota {frota} - Total de registros: {len(df[df['Frota'] == frota])}"):
-                df_frota = df[df['Frota'] == frota].copy()
-                df_frota = df_frota.sort_values(by="Data", ascending=False)
-                st.dataframe(df_frota[['Data', 'Horímetro Inicial', 'Horímetro Final', 'Horas Trabalhadas', 'Registrado por']],
-                             use_container_width=True)
+abas = st.tabs(["Registrar", "Administrador"])
+
+with abas[0]:
+    registrar_horimetro()
+
+with abas[1]:
+    visualizar_dados()
